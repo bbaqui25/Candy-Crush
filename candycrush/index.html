@@ -1,0 +1,506 @@
+<!--
+CandyCrush
+Your Name: Bushra Baqui
+Collaborators: Anthony Perritano
+References:
+https://www.w3resource.com/html5-canvas/html5-canvas-translation-rotation-scaling.php
+https://stackoverflow.com/questions/808826/draw-arrow-on-canvas-tag
+https://www.journaldev.com/4642/jquery-animate-examples
+w3Sschools
+mdn for getting the canvas coordinates - clientX , clientY
+https://www.w3schools.com/jquery/eff_animate.asp
+https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API
+https://stackoverflow.com/questions/26551428/get-the-mouse-position-in-mousedown-and-mousemove-events
+
+-->
+<!DOCTYPE html>
+<html>
+<!--
+/* Copyright (c) 2017 MIT 6.813/6.831 course staff, all rights reserved.
+ * Redistribution of original or derived work requires permission of course staff.
+ */
+-->
+
+<head>
+  <meta charset="utf-8">
+  <title>CandyCrush</title>
+
+  <!-- Load style sheets -->
+  <link rel="stylesheet" href=
+    "https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.css">
+
+  <link rel="stylesheet" href="mainLayout.css">
+
+  <!-- Use mobile-aware viewport -->
+  <meta name="viewport" content=
+    "width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <!-- Load any supplemental Javascript libraries here -->
+  <script src=
+    "https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <script src=
+    "https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.4.2/seedrandom.js">
+  </script>
+  <script src="candy.js"></script>
+  <script src="board.js"></script>
+  <script src="rules.js"></script>
+  
+  <script>
+
+  // By default, the first board loaded by your page will be the same 
+  // each time you load (which is accomplished by "seeding" the random
+  // number generator. This makes testing (and grading!) easier!
+  Math.seedrandom(0);
+
+  // A short jQuery extension to read query parameters from the URL.
+  $.extend({
+    getUrlVars: function() {
+    var vars = [], pair;
+    var pairs = window.location.search.substr(1).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+      pair = pairs[i].split('=');
+      vars.push(pair[0]);
+      vars[pair[0]] = pair[1] && decodeURIComponent(pair[1].replace(/\+/g, ' '));
+    }
+    return vars;
+  },
+  getUrlVar: function(name) {
+    return $.getUrlVars()[name];
+  }
+});
+
+// constants
+var DEFAULT_BOARD_SIZE = 8;
+var BOARD_SIZE = 8;
+
+var colAsLetter = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t'];
+var rowAsNumber = ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20'];
+
+// data model at global scope for easier debugging
+var board;
+var rules;
+var $candyTable;
+var crushing;
+var candyFrom;
+
+// drag and drop candy
+var $candyDrag;
+var candyDragLocation;
+var candyEndLocation;
+var candyDragCode;
+var candyDragMode = false;
+var candyDragStart = [0, 0];
+
+// initialize board
+var BOARD_SIZE = parseInt($.getUrlVar('size'));
+if (!isNaN(BOARD_SIZE) && BOARD_SIZE >= 3 && BOARD_SIZE <= 20) {
+  board = new Board(BOARD_SIZE);
+} else {
+  BOARD_SIZE = DEFAULT_BOARD_SIZE;
+  board = new Board(DEFAULT_BOARD_SIZE);
+}
+
+// load a rule
+rules = new Rules(board);
+
+// Final initialization entry point: the Javascript code inside this block
+// runs at the end of start-up when the page has finished loading.
+$(document).ready(function()
+{
+  // Your code here.
+  $candyTable = $("#candy-table");
+  rules.prepareNewGame();
+  checkCrushOnce();
+});
+
+function newGame() {
+  board.clear();
+  rules.prepareNewGame();
+  checkCrushOnce();
+  clearArrow();
+}
+
+function showMove() {
+  clearArrow();
+  var move = rules.getRandomValidMove();
+  if (move) {
+    drawArrow(move.candy.row, move.candy.col, move.direction);
+  } else {
+    $(".new-game").addClass("highlight");
+  }
+}
+
+function checkCrushOnce() {
+  if (rules.getCandyCrushes().length > 0) {
+    crushing = true;
+    crushOnce();
+  } else {
+    crushing = false;
+  }
+}
+
+function crushOnce() {
+  clearArrow();
+  setTimeout(function(){
+    rules.removeCrushes(rules.getCandyCrushes());
+    setTimeout(function(){
+      rules.moveCandiesDown();
+      checkCrushOnce();
+    }, 500);
+  }, 500);
+}
+
+function clearArrow() {
+  var canvas = document.getElementById("candy-canvas");
+  var ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawArrow(row, col, dir) {
+  var canvas = document.getElementById("candy-canvas");
+  var ctx = canvas.getContext("2d");
+  ctx.fillStyle = 'white';
+  //ctx.strokeStyle = 'green';
+  //ctx.lineWidth = 5;
+
+  var size = 320/BOARD_SIZE;
+  var pad = 0.2;
+  var weight = 0.15;
+
+  ctx.save();
+  ctx.translate(size*col, size*row);
+  
+  if (dir == "right") {
+    ctx.translate(size/2, 0);
+  } else if (dir == "left") {
+    ctx.translate(size, size);
+    ctx.translate(-size/2, 0);
+    ctx.rotate(Math.PI);
+  } else if (dir == "up") {
+    ctx.translate(0, size/2);
+    ctx.rotate(3*Math.PI/2);
+  } else {
+    ctx.translate(size, size);
+    ctx.translate(0, -size/2);
+    ctx.rotate(Math.PI/2);
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(size*pad, size*(0.5-weight));
+  ctx.lineTo(size*0.5, size*(0.5-weight));
+  ctx.lineTo(size*0.5, size*pad);
+  ctx.lineTo(size*(1-pad), size*0.5);
+  ctx.lineTo(size*0.5, size*(1-pad));
+  ctx.lineTo(size*0.5, size*(0.5+weight));
+  ctx.lineTo(size*pad, size*(0.5+weight));
+  
+  ctx.stroke();
+
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// prints the coordinates (a1,a2...)
+function displayRowCol(row, col) {
+  return (String.fromCharCode(col + 97)) + (row + 1);
+}
+
+function moveCandyIfValid(cellId, direction) {
+  var coord = getColRow(cellId);
+  var row = coord[0];
+  console.log(row);
+  var col = coord[1];
+  var candy1 = board.getCandyAt(row,col);
+  if (rules.isMoveTypeValid(candy1,direction)){
+    var candy2 = board.getCandyInDirection(candy1,direction);
+    board.flipCandies(candy1,candy2);
+  }
+}
+
+function getCoordinates(x, y) {
+   var cellSize = 320/BOARD_SIZE;
+   var candyTableLeft = $candyTable.offset().left;
+   var candyTableTop = $candyTable.offset().top;
+   if (!(x < candyTableLeft || x > candyTableLeft + 320 || y < candyTableTop || y > candyTableTop + 320)) {
+       return displayRowCol(Math.floor((y - candyTableTop)/cellSize), Math.floor((x - candyTableLeft)/cellSize));
+    }
+}
+
+function getPosition(pos) {
+    var y = pos[0].charCodeAt(0) - 97;
+    if (pos.length == 2) {
+        return [parseInt(pos[1]) - 1, y];
+    } else {
+        return [parseInt(pos.substr(1, 2)) - 1, y];
+    }
+}
+
+function getColRow(coord) {
+  var secondCo = parseInt(colAsLetter.indexOf(coord.charAt(0)));
+  var firstCo = parseInt(coord.substring(1))-1;
+  return [firstCo,secondCo];
+}
+
+function isValidInput(input) {
+  if (input == undefined){
+    return false;
+  }
+  if (input.length > 1) {
+    if (colAsLetter.indexOf(input.charAt(0)) > -1) {
+      if (rowAsNumber.indexOf(input.substring(1)) > -1) {
+      	return true;
+      }
+    }
+  }
+  return false;
+}
+
+function enableArrow(input) {
+  var directions = ['up','down','left','right'];
+  for (i=0;i<directions.length;i++){
+    var dir = directions[i];
+    if (isValidInput(input)){
+      var coord = getColRow(input);
+      var row = coord[0];
+      var col = coord[1];
+      var candy = board.getCandyAt(row,col);
+      if (rules.isMoveTypeValid(candy,dir)){
+        $('#'+dir).prop('disabled',false);
+        $('#'+dir).css('background-color', '#59b300');
+      }
+    } else {
+      $('#'+dir).prop('disabled',true);
+      $('#'+dir).css('background-color', 'lightgrey');
+    }
+  }
+}
+
+function disableArrow(){
+  var directions = ['up','down','left','right'];
+  for (i=0;i<directions.length;i++){
+    $('#'+directions[i]).prop('disabled',true);
+    $('#'+directions[i]).css('background-color', 'lightgrey');
+  }
+}
+
+// "up", "down", "left", "right"
+function getDirection(startCode, endCode) {
+  if (startCode == null || endCode == null) return "";
+  var startLoc = getPosition(startCode);
+  var endLoc = getPosition(endCode);
+  if (startLoc[0] == endLoc[0]) {
+    if (startLoc[1] + 1 == endLoc[1]) {
+      return "right";
+    } else if (startLoc[1] - 1 == endLoc[1]) {
+      return "left";
+    }
+  } else if (startLoc[1] == endLoc[1]) {
+    if (startLoc[0] + 1 == endLoc[0]) {
+      return "down";
+    } else if (startLoc[0] - 1 == endLoc[0]) {
+      return "up";
+    }
+  }
+  return "";
+}
+
+/* Event Handlers */
+// access the candy object with info.candy
+
+// add a candy to the board
+$(board).on('add', function(e, info) {
+  // console.log("add");
+  var cellSize = 320/BOARD_SIZE;
+  var cellCode = displayRowCol(info.candy.row, info.candy.col);
+  //console.log((String.fromCharCode(info.candy.col+97))+(info.candy.row+1));
+  //console.log(cellCode);
+  var $cell = $(document.createElement('div'));
+  //console.log($cell);
+  $cell.attr("id", "candy-" + cellCode);
+  //console.log( $cell.attr("id", cellCode));
+  $cell.attr("class", info.candy.color);
+  // console.log( $cell.attr("class", info.candy.color));
+  $cell.css({height: cellSize, width: cellSize});
+  $candyTable.append($cell);
+  if (info.fromRow) {
+    $cell.css({top: cellSize*info.fromRow, left: cellSize*info.fromCol});
+    var animateInfo = {top: cellSize*info.toRow, left: cellSize*info.toCol};
+    $cell.animate(animateInfo, 300, "swing", function() {
+      $cell.attr("id", "candy-" + cellCode);
+    });
+  } else {
+    $cell.css({top: cellSize*info.candy.row, left: cellSize*info.candy.col});
+  }   
+});
+
+// move a candy on the board
+$(board).on('move', function(e, info) {
+  // console.log("move", info);
+  var cellCodeFrom = displayRowCol(info.fromRow, info.fromCol);
+  var cellCodeTo = displayRowCol(info.toRow, info.toCol);
+  var $cell = $("#candy-" + cellCodeFrom);
+  $cell.unbind('click');
+
+  var animateInfo;    
+  if (info.candy == candyFrom) {
+    candyFrom = null;
+    animateInfo = {top: candyEndLocation[1], left: candyEndLocation[0]};
+
+    $cell.animate(animateInfo, 300, "swing", function() {
+      $cell.attr("id", "candy-" + cellCodeTo);
+    });
+  } else {
+    if (info.fromRow < info.toRow) { // move down
+      animateInfo = {top: $cell.position().top + 320/BOARD_SIZE * (info.toRow-info.fromRow)};
+    } else if (info.fromRow > info.toRow) { // move up
+      animateInfo = {top: $cell.position().top - 320/BOARD_SIZE * (info.fromRow-info.toRow)};
+    } else if (info.fromCol < info.toCol) { // move right
+      animateInfo = {left: $cell.position().left + 320/BOARD_SIZE * (info.toCol-info.fromCol)};
+    } else { // move left
+      animateInfo = {left: $cell.position().left - 320/BOARD_SIZE * (info.fromCol-info.toCol)};
+    }
+
+    $cell.animate(animateInfo, 300, "swing", function() {
+      $cell.attr("id", "candy-" + cellCodeTo);
+    });
+  }
+  checkCrushOnce();
+});
+
+// remove a candy from the board
+$(board).on('remove', function(e, info) {
+  // console.log("remove");
+  var cellCode = displayRowCol(info.fromRow, info.fromCol);
+  var $cell = $("#candy-" + cellCode);
+  $cell.attr("id", "");
+  $cell.fadeOut(150, "swing", function() {
+    $cell.remove();
+  });
+});
+
+// move a candy on the board
+$(board).on('scoreUpdate', function(e, info) {
+  $scoreNum = $("#score-num");
+  $scoreNum.removeClass();
+  if (info.candy) {
+    $scoreNum.addClass(info.candy.color);
+  }
+  $scoreNum.text(info.score);
+});
+
+// Button Events
+/*$(document).on('click', ".arrows", function(evt)
+{
+  clearArrow();
+  var input = $('#cellMoving').val();
+  var direction = evt.target.id;
+  moveCandyIfValid(input,direction);
+  disableArrow();
+  $('#cellMoving').val('');
+  $('#cellMoving').focus();
+});
+
+$(document).on('click', '#candy-table', function(evt)
+{
+  var $candyClick;
+  var candyClickPos;
+
+  disableArrow();
+  //console.log(evt.clientX, evt.clientY);
+  $candyClick = $("#candy-"+ getCoordinates(evt.clientX, evt.clientY));
+  //console.log($candyClick);
+  if($candyClick.length > 0) {
+  candyClickPos = [$candyClick.position().left, $candyClick.position().top];
+  //console.log(candyClickPos);
+
+  var row = String.fromCharCode(Math.floor($candyClick.position().left / (320/BOARD_SIZE)) + 97);
+  var col = Math.floor($candyClick.position().top/(320/BOARD_SIZE)) + 1;
+  //console.log(row);
+  //console.log(col);
+  var input = row + col;
+
+  $('#cellMoving').val(input);
+    enableArrow(input);
+  }
+});
+
+// keyboard events arrive here
+$(document).on('keyup','#cellMoving', function(evt){
+  disableArrow();
+  var input = $('#cellMoving').val();
+  enableArrow(input);
+});*/
+
+// Button Events
+$(document).on('mousedown', function(evt) {
+  $candyDrag = $("#candy-"+ getCoordinates(evt.clientX, evt.clientY));
+  if ($candyDrag.length > 0) {
+    candyDragLocation = [$candyDrag.position().left, $candyDrag.position().top];
+    candyDragStart = [evt.clientX, evt.clientY];
+    candyDragMode = true;
+    candyDragCode = getCoordinates(evt.clientX, evt.clientY);
+    candyFrom = board.getCandyAt(getPosition(candyDragCode)[0], getPosition(candyDragCode)[1]);
+  }
+});
+
+$(document).on('mousemove', function(evt) {
+  if (candyDragMode) {
+    // console.log(candyDragLocation);
+    // console.log($candyDrag.css('left'), $candyDrag.css('top'));
+    $candyDrag.css('left', candyDragLocation[0] + evt.clientX - candyDragStart[0]);
+    $candyDrag.css('top', candyDragLocation[1] + evt.clientY - candyDragStart[1]);
+  }
+});
+
+$(document).on('mouseup', function(evt) {
+  if (candyDragMode) {
+    // console.log(candyDragStart);
+    candyDragMode = false;
+    var candyEndCode = getCoordinates(evt.clientX, evt.clientY);
+    var $candyEnd = $("#candy-"+ candyEndCode);
+    
+    // if move type is valid
+    var dir = getDirection(candyDragCode, candyEndCode);
+    if ($candyEnd.length > 0 && dir != "" && rules.isMoveTypeValid(candyFrom, dir)) {
+        var candyTo = board.getCandyAt(getPosition(candyEndCode)[0], getPosition(candyEndCode)[1]);
+        candyEndLocation = [$candyEnd.position().left, $candyEnd.position().top];
+        board.flipCandies(candyFrom, candyTo);
+        clearArrow();
+    } else {
+        $candyDrag.css('left', candyDragLocation[0]);
+        $candyDrag.css('top', candyDragLocation[1]);
+    }
+  }
+});
+
+</script>
+
+</head>
+
+<body>
+
+<div class="container">
+  <div class="row">
+    <div class="col-md-6" id="firstColumn">
+      
+        <img src="candycrush.gif" alt="Candy Crush">
+        <p class="score"> <span id="score-num">0</span> Points </p>
+        <input type="button" value="New Game" class="btn new-game" onclick="newGame()">
+        <input type="button" value="Show Move" class="btn show-move" onclick="showMove()">
+      
+    </div>
+
+    <div class="col-md-6" id="mainColumn">
+      
+     <div id="candy-table"></div>
+      <canvas id="candy-canvas" width="320" height="320"> Your browser does not support the HTML5 canvas tag.</canvas>
+    
+    </div>
+
+  </div> <!-- class="row" -->
+</div> <!-- class="container" -->
+
+</body>
+
+</html>
